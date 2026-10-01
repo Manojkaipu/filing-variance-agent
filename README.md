@@ -93,7 +93,35 @@ digit; a percentage and a basis-point move overstated; a direction word
 flipped; citations dropped, invented, and repointed at a real-but-different
 fact; a tampered filing row; a ratio that no longer equals its own inputs;
 non-GAAP and forward-looking language; a bare numeral; and a number smuggled
-into an open question. `python -m src.cli eval verifier` reproduces it.
+into an open question. `python -m src.cli eval verifier` reproduces it, and
+CI fails the build on a missed defect, a false positive, or a mutation that
+quietly stopped applying.
+
+**How often does Claude clear verification unaided?** 20 company-quarters
+across Intel, AMD, NVIDIA, Micron and TI, drafted by `claude-opus-5-5`
+([full report](docs/eval_drafter.json)):
+
+```
+passed verification unaided: 17/17 drafts that completed (100%)
+did not complete: 3 of 20 (API credits ran out mid-run) — excluded
+906 numbers verified · 2 causal-language warnings for the reviewer
+```
+
+The first run of that eval scored **16/20, and all four failures were the
+pipeline's fault, not the model's.** The prompt's fact table rendered ratios
+to two decimals while the instructions asked for one, so the model was
+rounding an already-rounded number:
+
+| | true value | shown in prompt | model wrote | correct |
+|---|---|---|---|---|
+| ON Semiconductor revenue YoY | 14.6474% | 14.65% | 14.7% | **14.6%** |
+| Broadcom operating margin | 38.8496% | 38.85% | 38.9% | **38.8%** |
+
+The verifier was right to reject both. The fix was on the supply side — the
+prompt now carries exact dollars and four-decimal percentages, so a single
+rounding is always correct — and the failure mode disappeared. That is the
+eval earning its keep: it caught a defect in *my* code that reads, from the
+outside, exactly like an LLM hallucinating numbers.
 
 **What real data changed about the code.** Two rules were wrong in ways only
 real filings exposed:
@@ -222,7 +250,7 @@ raises an error and is never parsed as a draft.
 ## Testing
 
 ```bash
-pytest            # 114 tests: unit, Spark, and an end-to-end run on synthetic filings
+pytest            # 116 tests: unit, Spark, and an end-to-end run on synthetic filings
 ruff check src tests
 ```
 
@@ -288,10 +316,17 @@ src/cli.py                         demo / draft / eval / queue / show / approve 
   15/15 is a statement about those 15 classes on this data, not a guarantee.
   A defect nobody modelled — a plausible-but-wrong causal claim that reads as
   hedged, say — would pass check 1 and check 2 and land on the reviewer.
-- **The Claude drafter's pass rate on real filings is not yet measured.** The
-  deterministic drafter passes by construction, and the LLM path is tested
-  against a stubbed client, but `eval drafter` has not been run against the
-  API at scale. That is the one number still missing.
+- **17/17 is a small sample, and LLM output is stochastic.** It is one run
+  over five large-cap filers and four quarters. It shows the double-rounding
+  failure mode is gone at the source, not that the drafter cannot err; a
+  different company, a loss-making quarter, or a sharper analyst request
+  could surface something new. Three of the twenty never ran, so the sample
+  is 17.
+- **The verifier can only check arithmetic, not judgement.** It confirms
+  every figure traces to a filing and every change recomputes. It cannot
+  tell you the commentary emphasised the right things, and it deliberately
+  only *warns* on causal language — two drafts in the run earned that
+  warning, which is exactly the call a human should make.
 
 ## Disclaimer
 

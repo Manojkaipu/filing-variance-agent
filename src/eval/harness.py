@@ -145,12 +145,20 @@ def run_drafter_eval(
         )
 
     passed = sum(r["status"] == "passed" for r in results)
+    failed = sum(r["status"] == "failed" for r in results)
+    errored = sum(r["status"] == "drafter_error" for r in results)
+    # A draft that never came back (exhausted credits, a transport failure)
+    # is not evidence about the drafter's accuracy, so it is reported
+    # separately rather than folded into the pass rate. `completed` is the
+    # honest denominator; `drafter_errors` keeps the gap visible.
+    completed = passed + failed
     return {
         "cases": len(results),
+        "completed": completed,
         "passed": passed,
-        "failed": sum(r["status"] == "failed" for r in results),
-        "drafter_errors": sum(r["status"] == "drafter_error" for r in results),
-        "pass_rate": round(passed / len(results), 3) if results else None,
+        "failed": failed,
+        "drafter_errors": errored,
+        "pass_rate": round(passed / completed, 3) if completed else None,
         "numbers_checked": sum(r.get("numbers_checked", 0) for r in results),
         "error_codes": dict(error_codes.most_common()),
         "warning_codes": dict(warning_codes.most_common()),
@@ -204,14 +212,18 @@ def format_verifier_report(result: dict) -> str:
 
 
 def format_drafter_report(result: dict) -> str:
+    completed = result.get("completed", result["cases"])
     lines = [
         "Drafter eval",
         f"  cases: {result['cases']} company-quarters, {result['numbers_checked']} numbers verified",
-        f"  passed verification unaided: {result['passed']}/{result['cases']}"
+        f"  passed verification unaided: {result['passed']}/{completed} drafts that completed"
         + (f" ({result['pass_rate'] * 100:.0f}%)" if result["pass_rate"] is not None else ""),
     ]
     if result["drafter_errors"]:
-        lines.append(f"  drafter errors (refusal/truncation): {result['drafter_errors']}")
+        lines.append(
+            f"  did not complete (refusal, truncation, transport or billing): {result['drafter_errors']}"
+            f" of {result['cases']} — excluded from the pass rate"
+        )
     if result["error_codes"]:
         lines.append("  blocking issues: " + ", ".join(f"{c} x{n}" for c, n in result["error_codes"].items()))
     if result["warning_codes"]:

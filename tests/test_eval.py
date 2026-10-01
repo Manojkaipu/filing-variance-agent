@@ -80,12 +80,22 @@ def test_drafter_eval_reports_pass_rate_and_survives_a_failing_drafter(baseline)
         def draft(self, sheet, analyst_request=None):
             raise RuntimeError("refused")
 
-    good = run_drafter_eval(TemplateDrafter(), [(sheet, ledger)])
+    good = run_drafter_eval(TemplateDrafter(), [(sheet, ledger)], progress=False)
     assert good["pass_rate"] == 1.0 and good["passed"] == 1
 
-    bad = run_drafter_eval(Boom(), [(sheet, ledger)])
-    assert bad["drafter_errors"] == 1 and bad["pass_rate"] == 0.0
+    # A draft that never came back says nothing about accuracy, so it is
+    # excluded from the denominator and reported on its own. Folding it in
+    # would let an outage masquerade as a quality regression (and a billing
+    # failure mid-run did exactly that on the first real run).
+    bad = run_drafter_eval(Boom(), [(sheet, ledger)], progress=False)
+    assert bad["drafter_errors"] == 1
+    assert bad["completed"] == 0 and bad["pass_rate"] is None
     assert "refused" in bad["results"][0]["detail"]
+
+    mixed = run_drafter_eval(TemplateDrafter(), [(sheet, ledger)], progress=False)
+    mixed_report = format_drafter_report({**mixed, "cases": 2, "drafter_errors": 1})
+    assert "1/1 drafts that completed" in mixed_report
+    assert "did not complete" in mixed_report
 
 
 def test_reports_render_without_error(result, baseline):
