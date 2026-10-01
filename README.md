@@ -107,10 +107,11 @@ did not complete: 3 of 20 (API credits ran out mid-run) — excluded
 906 numbers verified · 2 causal-language warnings for the reviewer
 ```
 
-The first run of that eval scored **16/20, and all four failures were the
-pipeline's fault, not the model's.** The prompt's fact table rendered ratios
-to two decimals while the instructions asked for one, so the model was
-rounding an already-rounded number:
+The first run of that eval scored **16/20** — four failures, all
+`number_mismatch` except one that also flagged a direction error. I
+re-ran two of them and traced both to **the pipeline, not the model.** The
+prompt's fact table rendered ratios to two decimals while the instructions
+asked for one, so the model was rounding an already-rounded number:
 
 | | true value | shown in prompt | model wrote | correct |
 |---|---|---|---|---|
@@ -119,9 +120,14 @@ rounding an already-rounded number:
 
 The verifier was right to reject both. The fix was on the supply side — the
 prompt now carries exact dollars and four-decimal percentages, so a single
-rounding is always correct — and the failure mode disappeared. That is the
-eval earning its keep: it caught a defect in *my* code that reads, from the
-outside, exactly like an LLM hallucinating numbers.
+rounding is always correct. After it, no draft failed. I did not individually
+reproduce the other two failures (including that direction error), so I can't
+claim the same cause for them, only that the failure mode went away.
+
+That is the eval earning its keep: it found a defect in *my* code that reads,
+from the outside, exactly like an LLM inventing numbers — and the stored
+report now keeps each issue's message, because "number_mismatch ×4" could
+not tell those two cases apart.
 
 **What real data changed about the code.** Two rules were wrong in ways only
 real filings exposed:
