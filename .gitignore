@@ -1,0 +1,34 @@
+# Downloaded/generated data — large and regenerable, never commit
+data/raw/*
+data/bronze/*
+data/silver/*
+data/gold/*
+data/demo/
+data/review/
+data/*.db
+!data/raw/.gitkeep
+!data/bronze/.gitkeep
+!data/silver/.gitkeep
+!data/gold/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Spark
+derby.log
+metastore_db/
+spark-warehouse/
+
+# Secrets
+.env
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/

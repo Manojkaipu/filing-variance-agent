@@ -1,0 +1,6 @@
+# Normalize to LF in the repo. The pipeline and tests run on Linux in CI and
+# in WSL locally, and bronze parses tab-separated SEC files where a stray CR
+# would end up inside the last column's value.
+* text=auto eol=lf
+*.png binary
+*.zip binary

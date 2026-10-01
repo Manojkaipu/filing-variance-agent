@@ -1,0 +1,45 @@
+# Company universe for filing-variance-agent.
+#
+# CIKs are deliberately NOT hardcoded here. The SEC publishes an authoritative
+# ticker -> CIK mapping at https://www.sec.gov/files/company_tickers.json.
+# src/download/edgar_downloader.py resolves tickers against that file at
+# runtime and caches the result in data/raw/company_tickers.json. This means
+# the only thing that can go stale is the cache (safe to delete any time),
+# never a number someone typed in by hand.
+
+# Tickers are QUOTED deliberately. In YAML 1.1 (what PyYAML implements) the
+# bare words ON, OFF, YES, NO, Y and N parse as booleans, so an unquoted
+# `ticker: ON` for ON Semiconductor becomes `True` and no CIK can be resolved.
+focal_company:
+  ticker: "INTC"
+  name: Intel Corporation
+
+peers:
+  - ticker: "AMD"
+    name: Advanced Micro Devices
+  - ticker: "NVDA"
+    name: NVIDIA Corporation
+  - ticker: "QCOM"
+    name: Qualcomm Incorporated
+  - ticker: "AVGO"
+    name: Broadcom Inc.
+  - ticker: "TXN"
+    name: Texas Instruments Incorporated
+  - ticker: "MU"
+    name: Micron Technology
+  - ticker: "ADI"
+    name: Analog Devices
+  - ticker: "MRVL"
+    name: Marvell Technology
+  - ticker: "ON"
+    name: ON Semiconductor
+
+# Sector benchmark: SIC 3674 = "Semiconductors & Related Devices".
+# Used in Phase gold-sector to benchmark against every filer in the sector,
+# not just the named peers above.
+sector_sic_code: "3674"
+
+# Quarters to pull from the SEC Financial Statement Data Sets.
+# Format matches the SEC's own naming: YYYYqN
+start_quarter: "2018q1"  # ASC 606 revenue standard took effect here — see docs/metric_dictionary.md
+end_quarter: "2025q4"

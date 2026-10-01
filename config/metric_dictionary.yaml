@@ -1,0 +1,66 @@
+# Canonical metric -> ordered list of XBRL tags (us-gaap taxonomy) that can
+# report it. Order matters: silver.py takes the FIRST tag in the list that a
+# given filing actually reports, since companies don't all use the same tag,
+# and some switched tags when accounting standards changed.
+#
+# IMPORTANT — verify before trusting these for real numbers:
+# These tag names are written from general knowledge of the us-gaap taxonomy
+# and are a reasonable *starting point*, not a verified source. Before citing
+# numbers from real filings, cross-check each tag against a handful pulled
+# from data/raw/ (the tag.txt file in each quarterly dataset lists every tag
+# actually used that quarter) and against the SEC's own taxonomy viewer:
+# https://www.sec.gov/cgi-bin/viewer/viewer-standard.html?action=getcompany
+# Add or reorder tags as you find real filings that use ones not listed here.
+
+revenue:
+  - RevenueFromContractWithCustomerExcludingAssessedTax  # ASC 606, 2018+
+  - RevenueFromContractWithCustomerIncludingAssessedTax
+  - Revenues
+  - SalesRevenueNet  # pre-2018 tag, kept for years before ASC 606 adoption
+
+cost_of_revenue:
+  - CostOfRevenue
+  - CostOfGoodsAndServicesSold
+  - CostOfGoodsSold
+
+gross_profit:
+  - GrossProfit
+  # If not reported directly, silver.py derives it as revenue - cost_of_revenue
+  # and logs the derivation so it's distinguishable from a disclosed value.
+
+research_and_development_expense:
+  - ResearchAndDevelopmentExpense
+
+sga_expense:
+  - SellingGeneralAndAdministrativeExpense
+  - GeneralAndAdministrativeExpense  # some filers split SG&A into two tags
+
+operating_income:
+  - OperatingIncomeLoss
+
+net_income:
+  - NetIncomeLoss
+  - ProfitLoss
+
+# Point-in-time (balance sheet) metrics — qtrs == 0 in the num table.
+total_assets:
+  - Assets
+
+total_liabilities:
+  - Liabilities
+
+stockholders_equity:
+  - StockholdersEquity
+  - StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest
+
+# Accounting identities used by src/anomaly/rules.py to catch bad joins,
+# scale errors, and mis-tagged facts. Each is checked within a tolerance
+# (see config/anomaly_config.yaml) because rounding to the nearest million
+# is normal, not an anomaly.
+identities:
+  - name: gross_profit_identity
+    check: "gross_profit == revenue - cost_of_revenue"
+  - name: balance_sheet_identity
+    check: "total_assets == total_liabilities + stockholders_equity"
+  - name: quarters_sum_to_annual
+    check: "q1 + q2 + q3 + q4 == annual"

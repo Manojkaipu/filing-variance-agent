@@ -1,0 +1,23 @@
+# Tolerances for src/anomaly/rules.py.
+# Values are in the SAME UNITS the SEC dataset reports (typically whole
+# dollars — check the `uom` field in num.txt; most companies report in USD,
+# not thousands or millions, despite what the printed filing shows).
+
+# Accounting-identity checks: an identity is considered "broken" only if the
+# relative error exceeds this tolerance. Small breaks are normal rounding.
+identity_relative_tolerance: 0.005  # 0.5%
+
+# Scale-error detection: flag a value as a likely scale error (e.g., reported
+# in thousands where millions were expected) if it's off from the company's
+# own trailing-4-quarter median for that metric by at least this multiple.
+scale_error_multiple: 100
+
+# Minimum trailing quarters required before scale-error detection runs for a
+# given (company, metric) pair — avoids false positives on newly-tagged
+# metrics with no history yet.
+scale_error_min_history_quarters: 3
+
+# Restatement logging: only log a restatement/recast event if the delta
+# between as-first-reported and latest value exceeds this relative threshold.
+# Below this, treat it as immaterial rounding between filings.
+restatement_relative_threshold: 0.01  # 1%
