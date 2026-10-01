@@ -197,7 +197,13 @@ def fmt_pct(value: float) -> str:
 
 
 def fmt_bps(value: float) -> str:
-    return f"{abs(value) * 10000:.0f} basis points"
+    """Basis points for ordinary moves; percentage points once the move is
+    big enough that "1389 basis points" is harder to read than "13.9
+    percentage points". The verifier accepts either unit."""
+    bps = abs(value) * 10000
+    if bps >= 1000:
+        return f"{bps / 100:.1f} percentage points"
+    return f"{bps:.0f} basis points"
 
 
 def _direction(value: float, up: str = "up", down: str = "down") -> str:
@@ -371,6 +377,7 @@ METRIC_NAMES = {
 }
 CAVEATS = {
     "restatement_or_recast": "a restatement or recast (the panel uses the latest-filed values)",
+    "concept_change": "a change in which XBRL concept the company reports, so values either side are not comparable",
     "scale_error": "a possible scale error",
     "ytd_consistency": "quarters that don't sum to the year-to-date total",
     "gross_profit_identity": "a broken gross-profit identity",

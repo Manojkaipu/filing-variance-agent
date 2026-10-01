@@ -200,12 +200,21 @@ def check_sign_anomalies(cq: DataFrame) -> DataFrame:
 
 
 def check_restatements(facts: DataFrame, relative_threshold: float) -> DataFrame:
-    """Same (cik, metric, ddate, qtrs) fact reported with a different value
-    in a later filing = a restatement or recast. Needs the per-filing fact
-    history (silver `build_facts`), not the de-duplicated panel. This rule
-    only logs the event; both values stay in the fact history and the panel
-    uses the latest — see docs/metric_dictionary.md."""
-    key = ["cik", "metric", "ddate", "qtrs"]
+    """The SAME XBRL tag, for the same company and period, reported with a
+    materially different value in a later filing = a restatement or recast.
+    Needs the per-filing fact history (silver `build_facts`), not the
+    de-duplicated panel. This rule only logs the event; both values stay in
+    the fact history and the panel uses the latest.
+
+    `tag` is part of the key on purpose. Without it, a filer that switched
+    from StockholdersEquity to
+    StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest —
+    or from NetIncomeLoss to ProfitLoss — looks restated when it has only
+    changed which concept it discloses. On 14 quarters of real filings that
+    accounted for 28% of the flags (12,586 of 44,404), the equity pair alone
+    for 8,972. Those are a comparability problem, not a restatement, so
+    `check_concept_changes` reports them separately."""
+    key = ["cik", "metric", "ddate", "qtrs", "tag"]
     first_reported = (
         facts.withColumn("rn", F.row_number().over(Window.partitionBy(*key).orderBy("filed")))
         .filter(F.col("rn") == 1)
@@ -229,7 +238,8 @@ def check_restatements(facts: DataFrame, relative_threshold: float) -> DataFrame
         F.col("metric"),
         _ddate_period(),
         F.format_string(
-            "qtrs=%d: first_reported=%.0f (filed %s) -> latest=%.0f (filed %s), relative change=%.4f",
+            "%s (qtrs=%d): first_reported=%.0f (filed %s) -> latest=%.0f (filed %s), relative change=%.4f",
+            F.col("tag"),
             F.col("qtrs"),
             F.col("first_value"),
             F.col("first_filed").cast("string"),
@@ -238,6 +248,28 @@ def check_restatements(facts: DataFrame, relative_threshold: float) -> DataFrame
             rel_change,
         ),
         "both_values_kept",
+    )
+
+
+def check_concept_changes(facts: DataFrame) -> DataFrame:
+    """A company that reports one metric under different XBRL tags over time
+    has changed what it discloses, not corrected it — e.g. parent-only
+    equity to equity including noncontrolling interests. The values are not
+    comparable across the switch, so a YoY built across it is misleading."""
+    key = ["cik", "metric", "ddate", "qtrs"]
+    changed = (
+        facts.groupBy(*key)
+        .agg(F.collect_set("tag").alias("tags"))
+        .filter(F.size("tags") > 1)
+        .withColumn("tag_list", F.array_join(F.array_sort("tags"), " -> "))
+    )
+    return _log(
+        changed,
+        "concept_change",
+        F.col("metric"),
+        _ddate_period(),
+        F.format_string("reported under %d different tags across filings: %s", F.size("tags"), F.col("tag_list")),
+        "flagged_not_comparable",
     )
 
 
@@ -256,6 +288,7 @@ def run_all_checks(facts: DataFrame, cq: DataFrame, cfg: dict | None = None) -> 
         check_ytd_consistency(latest_filed_facts(facts), tol),
         check_sign_anomalies(cq),
         check_restatements(facts, cfg["restatement_relative_threshold"]),
+        check_concept_changes(facts),
     ]
     checks += [
         check_scale_errors(cq, metric, cfg["scale_error_multiple"], cfg["scale_error_min_history_quarters"])

@@ -5,6 +5,7 @@ from pyspark.sql import types as T
 from src.anomaly.rules import (
     LOG_COLUMNS,
     check_balance_sheet_identity,
+    check_concept_changes,
     check_gross_profit_identity,
     check_restatements,
     check_scale_errors,
@@ -119,16 +120,18 @@ FACTS_SCHEMA = T.StructType(
         T.StructField("qtrs", T.IntegerType()),
         T.StructField("value", T.DoubleType()),
         T.StructField("filed", T.DateType()),
+        T.StructField("tag", T.StringType()),
     ]
 )
+EQUITY, EQUITY_INCL_NCI = "StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"
 
 
 def test_restatement_keeps_both_values_and_logs_the_event(spark):
     facts = spark.createDataFrame(
         [
-            ("X", "revenue", dt.date(2023, 3, 31), 1, 1000.0, dt.date(2023, 4, 20)),
-            # The same fact, reported again later with a materially different value.
-            ("X", "revenue", dt.date(2023, 3, 31), 1, 1050.0, dt.date(2023, 7, 20)),
+            ("X", "revenue", dt.date(2023, 3, 31), 1, 1000.0, dt.date(2023, 4, 20), "Revenues"),
+            # The same tag and period, reported again later with a materially different value.
+            ("X", "revenue", dt.date(2023, 3, 31), 1, 1050.0, dt.date(2023, 7, 20), "Revenues"),
         ],
         FACTS_SCHEMA,
     )
@@ -137,28 +140,61 @@ def test_restatement_keeps_both_values_and_logs_the_event(spark):
     assert rows[0]["action"] == "both_values_kept"
     assert rows[0]["period"] == "2023Q1"
     assert "first_reported=1000" in rows[0]["detail"] and "latest=1050" in rows[0]["detail"]
+    assert "Revenues" in rows[0]["detail"]  # which concept was restated
 
 
 def test_restatement_ignores_immaterial_rounding(spark):
     facts = spark.createDataFrame(
         [
-            ("X", "revenue", dt.date(2023, 3, 31), 1, 1000.0, dt.date(2023, 4, 20)),
-            ("X", "revenue", dt.date(2023, 3, 31), 1, 1001.0, dt.date(2023, 7, 20)),  # 0.1%
+            ("X", "revenue", dt.date(2023, 3, 31), 1, 1000.0, dt.date(2023, 4, 20), "Revenues"),
+            ("X", "revenue", dt.date(2023, 3, 31), 1, 1001.0, dt.date(2023, 7, 20), "Revenues"),  # 0.1%
         ],
         FACTS_SCHEMA,
     )
     assert check_restatements(facts, relative_threshold=0.01).count() == 0
 
 
+def test_switching_concept_is_not_reported_as_a_restatement(spark):
+    # Parent-only equity vs equity including noncontrolling interests are
+    # different concepts. On real filings this pair alone accounted for
+    # 8,972 spurious "restatements" before tag became part of the key.
+    facts = spark.createDataFrame(
+        [
+            ("X", "stockholders_equity", dt.date(2023, 3, 31), 0, 1000.0, dt.date(2023, 4, 20), EQUITY),
+            ("X", "stockholders_equity", dt.date(2023, 3, 31), 0, 1400.0, dt.date(2024, 4, 20), EQUITY_INCL_NCI),
+        ],
+        FACTS_SCHEMA,
+    )
+    assert check_restatements(facts, relative_threshold=0.01).count() == 0
+
+    # It is still worth telling the reviewer about, as a comparability break.
+    rows = check_concept_changes(facts).collect()
+    assert len(rows) == 1
+    assert rows[0]["rule"] == "concept_change"
+    assert rows[0]["action"] == "flagged_not_comparable"
+    assert EQUITY in rows[0]["detail"] and EQUITY_INCL_NCI in rows[0]["detail"]
+
+
+def test_a_single_consistent_concept_is_not_flagged(spark):
+    facts = spark.createDataFrame(
+        [
+            ("X", "stockholders_equity", dt.date(2023, 3, 31), 0, 1000.0, dt.date(2023, 4, 20), EQUITY),
+            ("X", "stockholders_equity", dt.date(2023, 6, 30), 0, 1100.0, dt.date(2023, 7, 20), EQUITY),
+        ],
+        FACTS_SCHEMA,
+    )
+    assert check_concept_changes(facts).count() == 0
+
+
 def ytd_facts(spark, q3_value):
     return spark.createDataFrame(
         [
-            ("X", "revenue", dt.date(2023, 3, 31), 1, 100.0, dt.date(2023, 4, 20)),
-            ("X", "revenue", dt.date(2023, 6, 30), 1, 110.0, dt.date(2023, 7, 20)),
-            ("X", "revenue", dt.date(2023, 9, 30), 1, q3_value, dt.date(2023, 10, 20)),
-            ("X", "revenue", dt.date(2023, 9, 30), 3, 330.0, dt.date(2023, 10, 20)),
+            ("X", "revenue", dt.date(2023, 3, 31), 1, 100.0, dt.date(2023, 4, 20), "Revenues"),
+            ("X", "revenue", dt.date(2023, 6, 30), 1, 110.0, dt.date(2023, 7, 20), "Revenues"),
+            ("X", "revenue", dt.date(2023, 9, 30), 1, q3_value, dt.date(2023, 10, 20), "Revenues"),
+            ("X", "revenue", dt.date(2023, 9, 30), 3, 330.0, dt.date(2023, 10, 20), "Revenues"),
             # Prior-year Q4 sits outside the nine-month window and must be ignored.
-            ("X", "revenue", dt.date(2022, 12, 31), 1, 999.0, dt.date(2023, 1, 20)),
+            ("X", "revenue", dt.date(2022, 12, 31), 1, 999.0, dt.date(2023, 1, 20), "Revenues"),
         ],
         FACTS_SCHEMA,
     )
