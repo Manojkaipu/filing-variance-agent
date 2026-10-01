@@ -23,5 +23,33 @@ jobs:
         run: ruff check src tests && ruff format --check src tests
       - name: Test (unit + end-to-end on synthetic filings)
         run: pytest -v
-      - name: Demo
+      - name: Demo (synthetic filings end to end)
         run: python -m src.cli --db /tmp/queue.db demo && python -m src.cli --db /tmp/queue.db show 1
+
+      # Enforces the verifier's recall/specificity through the CLI, not just
+      # the unit fixture, so a regression in the real code path fails the build.
+      - name: Verifier eval
+        run: |
+          python -m src.cli eval verifier --data-dir data/demo --ticker DEMO --quarter 2024Q4 \
+            --out /tmp/eval.json
+          python - <<'PY'
+          import json, sys
+          r = json.load(open("/tmp/eval.json"))
+          recall, spec = r["recall"], r["specificity"]
+          print(f"recall {recall['caught']}/{recall['applicable']}, "
+                f"specificity {spec['clean']}/{spec['applicable']}")
+          problems = []
+          if not r["baseline_passed"]:
+              problems.append(f"baseline draft failed: {r['baseline_errors']}")
+          if recall["missed"]:
+              problems.append(f"missed defects: {recall['missed']}")
+          if spec["false_positives"]:
+              problems.append(f"false positives: {spec['false_positives']}")
+          if r["skipped"]:
+              problems.append(f"mutations that did not apply: {r['skipped']}")
+          if problems:
+              sys.exit("eval regression -> " + "; ".join(problems))
+          PY
+
+      - name: Drafter eval (template baseline, no API calls)
+        run: python -m src.cli eval drafter --offline --data-dir data/demo --tickers DEMO,ALPHA,BETA,GAMMA --quarters 2024Q3,2024Q4
