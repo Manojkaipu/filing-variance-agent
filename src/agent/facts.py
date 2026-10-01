@@ -90,8 +90,8 @@ class Fact:
     inputs: tuple[str, ...] = ()  # derived facts: IDs of input facts
     note: str | None = None
 
-    def display(self) -> str:
-        return format_value(self.value, self.unit, self.formula)
+    def display(self, precise: bool = False) -> str:
+        return format_value(self.value, self.unit, self.formula, precise=precise)
 
 
 @dataclass
@@ -116,7 +116,7 @@ class FactSheet:
         """Compact, line-per-fact rendering for the LLM prompt."""
         lines = []
         for f in self.facts.values():
-            shown = f.display()
+            shown = f.display(precise=True)
             extra = f" = {f.formula}({', '.join(f.inputs)})" if f.formula else ""
             flag = " [derived by pipeline]" if f.source and f.source.is_derived else ""
             lines.append(f"{f.id} | {f.label} | {f.period} | {shown}{extra}{flag}")
@@ -140,11 +140,23 @@ def edgar_filing_url(cik: str, adsh: str) -> str:
     return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{adsh.replace('-', '')}/{adsh}-index.htm"
 
 
-def format_value(value: float, unit: str, formula: str | None = None) -> str:
+def format_value(value: float, unit: str, formula: str | None = None, precise: bool = False) -> str:
+    """`precise=True` is for the drafter's prompt; the default is for humans.
+
+    The distinction matters more than it looks. A ratio shown to two decimals
+    makes the drafter round twice: it is told to write one decimal, so it
+    reads 14.65% off the fact sheet and writes 14.7%, when the true value is
+    14.6474% and the right answer is 14.6%. The verifier then — correctly —
+    rejects the figure. Two of the four failures in the first 20-draft eval
+    were exactly this, and both were the pipeline's fault, not the model's.
+    So the prompt gets enough precision to round once, and exact dollars
+    rather than a pre-scaled amount."""
     if formula == DIFFERENCE:  # a margin move: percentage points, not percent
-        return f"{value * 100:+.2f} pp"
+        return f"{value * 100:+.4f} pp" if precise else f"{value * 100:+.2f} pp"
     if unit == RATIO:
-        return f"{value * 100:.2f}%"
+        return f"{value * 100:.4f}%" if precise else f"{value * 100:.2f}%"
+    if precise:
+        return f"${value:,.0f}"
     magnitude = abs(value)
     sign = "-" if value < 0 else ""
     if magnitude >= 1e9:

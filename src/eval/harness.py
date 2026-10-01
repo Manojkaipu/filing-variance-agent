@@ -130,6 +130,16 @@ def run_drafter_eval(
                 "facts_source_checked": report.facts_source_checked,
                 "errors": list(_error_codes(report)),
                 "warnings": sorted({i.code for i in report.issues if i.level == WARNING}),
+                # The messages, not just the codes: "number_mismatch x4" says
+                # nothing about whether the model misread a fact or rounded
+                # badly, and that is the whole question when deciding what to
+                # fix in the prompt.
+                "error_detail": [
+                    {"code": i.code, "sentence": i.sentence_index, "message": i.message}
+                    for i in report.issues
+                    if i.level == ERROR
+                ],
+                "sentences_text": [s.text for s in draft.sentences],
                 "seconds": round(time.perf_counter() - started, 1),
             }
         )

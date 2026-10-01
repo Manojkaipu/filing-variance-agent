@@ -55,7 +55,10 @@ def test_claude_drafter_sends_fact_sheet_and_schema_and_parses_the_draft():
     assert call["output_config"]["format"] == {"type": "json_schema", "schema": DRAFT_SCHEMA}
     assert call["fallbacks"] == "default"
     prompt = call["messages"][0]["content"]
-    assert "ACME.revenue.2024Q4 | Revenue | 2024Q4 | $11.000B" in prompt
+    # Exact dollars and 4-decimal percents in the prompt, so the model never
+    # rounds a value that was already rounded for display.
+    assert "ACME.revenue.2024Q4 | Revenue | 2024Q4 | $11,000,000,000" in prompt
+    assert "ACME.gross_margin_pct.2024Q4 | Gross margin | 2024Q4 | 43.0000%" in prompt
     assert "restatement_or_recast" in prompt  # anomaly log is shown to the model
 
     assert len(draft.sentences) == 2 and draft.drafter == "claude-opus-5-5"
@@ -95,6 +98,17 @@ def test_template_groups_anomalies_into_one_caveat_per_period_and_rule():
     caveats = [s.text for s in draft.sentences if s.section == "data_caveats" and "anomaly log" in s.text]
     assert len(caveats) == 1
     assert "(revenue, SG&A, net income)" in caveats[0]
+
+
+def test_prompt_precision_lets_the_model_round_once():
+    from src.agent.facts import RATIO, format_value
+
+    # The real failure: 14.6474% shown as "14.65%" invites 14.7%, but the
+    # correct one-step rounding is 14.6%.
+    assert format_value(0.146474, RATIO) == "14.65%"  # human-facing
+    assert format_value(0.146474, RATIO, precise=True) == "14.6474%"  # prompt
+    assert format_value(0.388496, RATIO, precise=True) == "38.8496%"
+    assert format_value(11_000_000_000.0, "USD", precise=True) == "$11,000,000,000"
 
 
 def test_margin_moves_switch_to_percentage_points_when_large():
