@@ -43,9 +43,7 @@ def _error_codes(report: VerificationReport) -> tuple[str, ...]:
     return tuple(sorted({i.code for i in report.issues if i.level == ERROR}))
 
 
-def evaluate_mutation(
-    mutation: Mutation, draft, sheet: FactSheet, ledger: SourceLedger | None
-) -> MutationOutcome:
+def evaluate_mutation(mutation: Mutation, draft, sheet: FactSheet, ledger: SourceLedger | None) -> MutationOutcome:
     mutated = mutation.apply(draft, sheet, ledger)
     if mutated is None:
         return MutationOutcome(mutation.name, mutation.kind, mutation.describe, NOT_APPLICABLE)
@@ -75,11 +73,17 @@ def run_verifier_eval(draft, sheet: FactSheet, ledger: SourceLedger | None) -> d
         "baseline_numbers_checked": baseline.numbers_checked,
         "baseline_facts_source_checked": baseline.facts_source_checked,
         "baseline_errors": list(_error_codes(baseline)),
-        "recall": {"caught": len(caught), "applicable": len(errors), "missed": [o.mutation for o in errors if o.status == MISSED]},
+        "recall": {
+            "caught": len(caught),
+            "applicable": len(errors),
+            "missed": [o.mutation for o in errors if o.status == MISSED],
+        },
         "specificity": {
             "clean": len(clean),
             "applicable": len(benign),
-            "false_positives": [{"mutation": o.mutation, "codes": list(o.reported_codes)} for o in benign if o.status == FALSE_POSITIVE],
+            "false_positives": [
+                {"mutation": o.mutation, "codes": list(o.reported_codes)} for o in benign if o.status == FALSE_POSITIVE
+            ],
         },
         "skipped": [o.mutation for o in outcomes if o.status == NOT_APPLICABLE],
         "outcomes": [vars(o) | {"reported_codes": list(o.reported_codes)} for o in outcomes],
@@ -95,23 +99,31 @@ def run_drafter_eval(drafter: Drafter, cases: list[tuple[FactSheet, SourceLedger
         try:
             draft = drafter.draft(sheet)
         except Exception as e:  # refusal, truncation, transport failure
-            results.append({"case": f"{sheet.ticker} {sheet.period}", "status": "drafter_error", "detail": f"{type(e).__name__}: {e}"})
+            results.append(
+                {
+                    "case": f"{sheet.ticker} {sheet.period}",
+                    "status": "drafter_error",
+                    "detail": f"{type(e).__name__}: {e}",
+                }
+            )
             continue
 
         report = verify(draft, sheet, ledger)
         error_codes.update(i.code for i in report.issues if i.level == ERROR)
         warning_codes.update(i.code for i in report.issues if i.level == WARNING)
-        results.append({
-            "case": f"{sheet.ticker} {sheet.period}",
-            "status": "passed" if report.passed else "failed",
-            "drafter": draft.drafter,
-            "sentences": len(draft.sentences),
-            "numbers_checked": report.numbers_checked,
-            "facts_source_checked": report.facts_source_checked,
-            "errors": list(_error_codes(report)),
-            "warnings": sorted({i.code for i in report.issues if i.level == WARNING}),
-            "seconds": round(time.perf_counter() - started, 1),
-        })
+        results.append(
+            {
+                "case": f"{sheet.ticker} {sheet.period}",
+                "status": "passed" if report.passed else "failed",
+                "drafter": draft.drafter,
+                "sentences": len(draft.sentences),
+                "numbers_checked": report.numbers_checked,
+                "facts_source_checked": report.facts_source_checked,
+                "errors": list(_error_codes(report)),
+                "warnings": sorted({i.code for i in report.issues if i.level == WARNING}),
+                "seconds": round(time.perf_counter() - started, 1),
+            }
+        )
 
     passed = sum(r["status"] == "passed" for r in results)
     return {
@@ -131,15 +143,23 @@ def run_drafter_eval(drafter: Drafter, cases: list[tuple[FactSheet, SourceLedger
 # Reporting
 # ---------------------------------------------------------------------------
 
-_STATUS_MARK = {CAUGHT: "caught", MISSED: "MISSED", CLEAN: "clean", FALSE_POSITIVE: "FALSE POSITIVE", NOT_APPLICABLE: "n/a"}
+_STATUS_MARK = {
+    CAUGHT: "caught",
+    MISSED: "MISSED",
+    CLEAN: "clean",
+    FALSE_POSITIVE: "FALSE POSITIVE",
+    NOT_APPLICABLE: "n/a",
+}
 
 
 def format_verifier_report(result: dict) -> str:
     recall, spec = result["recall"], result["specificity"]
     lines = [
         "Verifier eval",
-        f"  baseline draft: {'passes' if result['baseline_passed'] else 'FAILS — ' + ', '.join(result['baseline_errors'])}"
-        f" ({result['baseline_numbers_checked']} numbers, {result['baseline_facts_source_checked']} facts re-derived)",
+        "  baseline draft: "
+        + ("passes" if result["baseline_passed"] else "FAILS — " + ", ".join(result["baseline_errors"]))
+        + f" ({result['baseline_numbers_checked']} numbers,"
+        + f" {result['baseline_facts_source_checked']} facts re-derived)",
         "",
         "  Injected defects (must be caught):",
     ]

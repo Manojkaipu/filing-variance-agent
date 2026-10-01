@@ -97,6 +97,15 @@ def test_template_groups_anomalies_into_one_caveat_per_period_and_rule():
     assert "(revenue, SG&A, net income)" in caveats[0]
 
 
+def test_margin_moves_switch_to_percentage_points_when_large():
+    from src.agent.drafter import fmt_bps
+
+    assert fmt_bps(0.017) == "170 basis points"
+    assert fmt_bps(-0.0045) == "45 basis points"
+    # Intel's 2024Q4 operating margin move: "1389 basis points" reads badly.
+    assert fmt_bps(-0.1389) == "13.9 percentage points"
+
+
 def test_fact_sheet_json_round_trip():
     sheet = make_sheet()
     restored = FactSheet.from_json(sheet.to_json())

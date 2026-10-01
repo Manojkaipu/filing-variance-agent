@@ -1,0 +1,192 @@
+{
+  "baseline_errors": [],
+  "baseline_facts_source_checked": 9,
+  "baseline_numbers_checked": 15,
+  "baseline_passed": true,
+  "case": "INTC 2024Q4",
+  "outcomes": [
+    {
+      "describe": "a dollar figure inflated by 2%",
+      "kind": "error",
+      "mutation": "money_off_by_2pct",
+      "reported_codes": [
+        "number_mismatch"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a dollar figure reported in the wrong scale",
+      "kind": "error",
+      "mutation": "money_off_by_1000x",
+      "reported_codes": [
+        "number_mismatch"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a dollar figure wrong in its last written digit",
+      "kind": "error",
+      "mutation": "money_last_digit",
+      "reported_codes": [
+        "number_mismatch"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a percentage inflated by a tenth",
+      "kind": "error",
+      "mutation": "percent_off_by_10pct",
+      "reported_codes": [
+        "number_mismatch"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a margin move overstated by half",
+      "kind": "error",
+      "mutation": "basis_points_off",
+      "reported_codes": [
+        "number_mismatch"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a correct figure described in the wrong direction",
+      "kind": "error",
+      "mutation": "direction_flipped",
+      "reported_codes": [
+        "direction_mismatch"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "numbers with no cited source",
+      "kind": "error",
+      "mutation": "citations_dropped",
+      "reported_codes": [
+        "uncited_number"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a citation to a fact that doesn't exist",
+      "kind": "error",
+      "mutation": "citation_invented",
+      "reported_codes": [
+        "uncited_number",
+        "unknown_fact_id"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a real citation that isn't the written number",
+      "kind": "error",
+      "mutation": "citation_swapped",
+      "reported_codes": [
+        "number_mismatch"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a fact sheet value that disagrees with the filing",
+      "kind": "error",
+      "mutation": "filing_tampered",
+      "reported_codes": [
+        "source_mismatch"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a ratio that doesn't equal its own inputs",
+      "kind": "error",
+      "mutation": "ratio_internally_wrong",
+      "reported_codes": [
+        "number_mismatch",
+        "recompute_mismatch"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a non-GAAP measure",
+      "kind": "error",
+      "mutation": "non_gaap_added",
+      "reported_codes": [
+        "non_gaap"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a forward-looking statement",
+      "kind": "error",
+      "mutation": "forward_looking_added",
+      "reported_codes": [
+        "forward_looking"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "an unverifiable bare numeral",
+      "kind": "error",
+      "mutation": "bare_numeral_added",
+      "reported_codes": [
+        "unverifiable_numeral"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a number smuggled into an open question",
+      "kind": "error",
+      "mutation": "number_in_open_question",
+      "reported_codes": [
+        "number_in_open_question"
+      ],
+      "status": "caught"
+    },
+    {
+      "describe": "a figure rounded to fewer decimals",
+      "kind": "benign",
+      "mutation": "rounded_coarser",
+      "reported_codes": [],
+      "status": "clean"
+    },
+    {
+      "describe": "an up/down word swapped for a synonym",
+      "kind": "benign",
+      "mutation": "direction_synonym",
+      "reported_codes": [],
+      "status": "clean"
+    },
+    {
+      "describe": "an added sentence with no figures",
+      "kind": "benign",
+      "mutation": "numberless_sentence_added",
+      "reported_codes": [],
+      "status": "clean"
+    },
+    {
+      "describe": "a count written as a word",
+      "kind": "benign",
+      "mutation": "count_spelled_out",
+      "reported_codes": [],
+      "status": "clean"
+    },
+    {
+      "describe": "a sentence reworded around the same figures",
+      "kind": "benign",
+      "mutation": "sentence_reworded",
+      "reported_codes": [],
+      "status": "clean"
+    }
+  ],
+  "recall": {
+    "applicable": 15,
+    "caught": 15,
+    "missed": []
+  },
+  "skipped": [],
+  "specificity": {
+    "applicable": 5,
+    "clean": 5,
+    "false_positives": []
+  }
+}

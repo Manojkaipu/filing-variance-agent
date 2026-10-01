@@ -215,7 +215,11 @@ def _tamper_derived_ratio(draft, sheet, ledger):
 
 
 def _add_non_gaap(draft, sheet, ledger):
-    return _append_sentence(draft, "margins", "Non-GAAP gross margin was stronger than the reported figure."), sheet, ledger
+    return (
+        _append_sentence(draft, "margins", "Non-GAAP gross margin was stronger than the reported figure."),
+        sheet,
+        ledger,
+    )
 
 
 def _add_forward_looking(draft, sheet, ledger):
@@ -263,11 +267,19 @@ def _synonym_direction(draft, sheet, ledger):
 
 
 def _add_numberless_sentence(draft, sheet, ledger):
-    return _append_sentence(draft, "revenue", "The quarter's mix across the product portfolio is not disclosed in XBRL."), sheet, ledger
+    return (
+        _append_sentence(draft, "revenue", "The quarter's mix across the product portfolio is not disclosed in XBRL."),
+        sheet,
+        ledger,
+    )
 
 
 def _spell_out_a_count(draft, sheet, ledger):
-    return _append_sentence(draft, "peer_context", "Two of the named peers do not report a comparable figure."), sheet, ledger
+    return (
+        _append_sentence(draft, "peer_context", "Two of the named peers do not report a comparable figure."),
+        sheet,
+        ledger,
+    )
 
 
 def _reword_keeping_numbers(draft, sheet, ledger):
@@ -279,29 +291,121 @@ def _reword_keeping_numbers(draft, sheet, ledger):
 
 
 ERROR_MUTATIONS = [
-    Mutation("money_off_by_2pct", "error", "a dollar figure inflated by 2%", frozenset({"number_mismatch"}), _nudge_money(1.02)),
-    Mutation("money_off_by_1000x", "error", "a dollar figure reported in the wrong scale", frozenset({"number_mismatch"}), _nudge_money(1000)),
-    Mutation("money_last_digit", "error", "a dollar figure wrong in its last written digit", frozenset({"number_mismatch"}), _nudge_money(1.001)),
-    Mutation("percent_off_by_10pct", "error", "a percentage inflated by a tenth", frozenset({"number_mismatch"}), _nudge_percent(1.10)),
-    Mutation("basis_points_off", "error", "a margin move overstated by half", frozenset({"number_mismatch"}), _nudge_basis_points(1.5)),
-    Mutation("direction_flipped", "error", "a correct figure described in the wrong direction", frozenset({"direction_mismatch"}), _flip_direction),
-    Mutation("citations_dropped", "error", "numbers with no cited source", frozenset({"uncited_number"}), _drop_citations),
-    Mutation("citation_invented", "error", "a citation to a fact that doesn't exist", frozenset({"unknown_fact_id"}), _fake_citation),
-    Mutation("citation_swapped", "error", "a real citation that isn't the written number", frozenset({"number_mismatch"}), _swap_citation),
-    Mutation("filing_tampered", "error", "a fact sheet value that disagrees with the filing", frozenset({"source_mismatch"}), _tamper_filing),
-    Mutation("ratio_internally_wrong", "error", "a ratio that doesn't equal its own inputs", frozenset({"recompute_mismatch"}), _tamper_derived_ratio),
+    Mutation(
+        "money_off_by_2pct",
+        "error",
+        "a dollar figure inflated by 2%",
+        frozenset({"number_mismatch"}),
+        _nudge_money(1.02),
+    ),
+    Mutation(
+        "money_off_by_1000x",
+        "error",
+        "a dollar figure reported in the wrong scale",
+        frozenset({"number_mismatch"}),
+        _nudge_money(1000),
+    ),
+    Mutation(
+        "money_last_digit",
+        "error",
+        "a dollar figure wrong in its last written digit",
+        frozenset({"number_mismatch"}),
+        _nudge_money(1.001),
+    ),
+    Mutation(
+        "percent_off_by_10pct",
+        "error",
+        "a percentage inflated by a tenth",
+        frozenset({"number_mismatch"}),
+        _nudge_percent(1.10),
+    ),
+    Mutation(
+        "basis_points_off",
+        "error",
+        "a margin move overstated by half",
+        frozenset({"number_mismatch"}),
+        _nudge_basis_points(1.5),
+    ),
+    Mutation(
+        "direction_flipped",
+        "error",
+        "a correct figure described in the wrong direction",
+        frozenset({"direction_mismatch"}),
+        _flip_direction,
+    ),
+    Mutation(
+        "citations_dropped", "error", "numbers with no cited source", frozenset({"uncited_number"}), _drop_citations
+    ),
+    Mutation(
+        "citation_invented",
+        "error",
+        "a citation to a fact that doesn't exist",
+        frozenset({"unknown_fact_id"}),
+        _fake_citation,
+    ),
+    Mutation(
+        "citation_swapped",
+        "error",
+        "a real citation that isn't the written number",
+        frozenset({"number_mismatch"}),
+        _swap_citation,
+    ),
+    Mutation(
+        "filing_tampered",
+        "error",
+        "a fact sheet value that disagrees with the filing",
+        frozenset({"source_mismatch"}),
+        _tamper_filing,
+    ),
+    Mutation(
+        "ratio_internally_wrong",
+        "error",
+        "a ratio that doesn't equal its own inputs",
+        frozenset({"recompute_mismatch"}),
+        _tamper_derived_ratio,
+    ),
     Mutation("non_gaap_added", "error", "a non-GAAP measure", frozenset({"non_gaap"}), _add_non_gaap),
-    Mutation("forward_looking_added", "error", "a forward-looking statement", frozenset({"forward_looking"}), _add_forward_looking),
-    Mutation("bare_numeral_added", "error", "an unverifiable bare numeral", frozenset({"unverifiable_numeral"}), _add_bare_numeral),
-    Mutation("number_in_open_question", "error", "a number smuggled into an open question", frozenset({"number_in_open_question"}), _add_number_to_open_question),
+    Mutation(
+        "forward_looking_added",
+        "error",
+        "a forward-looking statement",
+        frozenset({"forward_looking"}),
+        _add_forward_looking,
+    ),
+    Mutation(
+        "bare_numeral_added",
+        "error",
+        "an unverifiable bare numeral",
+        frozenset({"unverifiable_numeral"}),
+        _add_bare_numeral,
+    ),
+    Mutation(
+        "number_in_open_question",
+        "error",
+        "a number smuggled into an open question",
+        frozenset({"number_in_open_question"}),
+        _add_number_to_open_question,
+    ),
 ]
 
 BENIGN_MUTATIONS = [
     Mutation("rounded_coarser", "benign", "a figure rounded to fewer decimals", frozenset(), _coarsen_money),
     Mutation("direction_synonym", "benign", "an up/down word swapped for a synonym", frozenset(), _synonym_direction),
-    Mutation("numberless_sentence_added", "benign", "an added sentence with no figures", frozenset(), _add_numberless_sentence),
+    Mutation(
+        "numberless_sentence_added",
+        "benign",
+        "an added sentence with no figures",
+        frozenset(),
+        _add_numberless_sentence,
+    ),
     Mutation("count_spelled_out", "benign", "a count written as a word", frozenset(), _spell_out_a_count),
-    Mutation("sentence_reworded", "benign", "a sentence reworded around the same figures", frozenset(), _reword_keeping_numbers),
+    Mutation(
+        "sentence_reworded",
+        "benign",
+        "a sentence reworded around the same figures",
+        frozenset(),
+        _reword_keeping_numbers,
+    ),
 ]
 
 ALL_MUTATIONS = ERROR_MUTATIONS + BENIGN_MUTATIONS

@@ -91,4 +91,6 @@ def test_drafter_eval_reports_pass_rate_and_survives_a_failing_drafter(baseline)
 def test_reports_render_without_error(result, baseline):
     _, sheet, ledger = baseline
     assert "recall:" in format_verifier_report(result)
-    assert "passed verification unaided" in format_drafter_report(run_drafter_eval(TemplateDrafter(), [(sheet, ledger)]))
+    assert "passed verification unaided" in format_drafter_report(
+        run_drafter_eval(TemplateDrafter(), [(sheet, ledger)])
+    )
