@@ -50,7 +50,7 @@ SEC EDGAR Financial Statement Data Sets (every XBRL fact, every filer)
       │                  restatements, concept changes
       │     tableau_export/*.csv
       ▼
- [agent]    fact sheet (≈70 cited facts) → drafter (Claude, or offline template) → Draft
+ [agent]    fact sheet (88 cited facts for Intel 2024Q4) → drafter (Claude or template) → Draft
       │                                     every sentence lists the fact IDs it uses
       ▼
  [verifier] check 1: each $ / % / bps in the prose = correct rounding of a cited fact
