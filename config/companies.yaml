@@ -35,9 +35,27 @@ peers:
     name: ON Semiconductor
 
 # Sector benchmark: SIC 3674 = "Semiconductors & Related Devices".
-# Used in Phase gold-sector to benchmark against every filer in the sector,
-# not just the named peers above.
+# Benchmarks against every filer in the sector, not just the named peers.
 sector_sic_code: "3674"
+
+# Minimum quarterly revenue (USD) for a filer to enter the sector median.
+#
+# This is a real analytical choice, not a tuning knob. SIC 3674 has ~80
+# reporting filers and the tail is tiny and often deeply unprofitable
+# (Wolfspeed was at -179% operating margin in 2024Q4). Measured on the
+# 2024Q4 data in this repo:
+#
+#   population                  filers   gross margin median   operating margin median
+#   all filers                      79                 45.7%                      0.1%
+#   >= $50M quarterly revenue       51                 46.5%                      6.0%
+#   >= $500M quarterly revenue      19                 50.5%                     21.7%
+#
+# With no floor, Intel's 2.9% operating margin came out ABOVE the sector
+# median, which is technically true and tells a reader nothing. Raise this
+# to compare against large-caps only; set it to 0 to include every filer.
+# The value is recorded on every benchmark row so a median is always
+# self-describing.
+sector_min_quarterly_revenue: 50_000_000
 
 # Quarters to pull from the SEC Financial Statement Data Sets.
 # Format matches the SEC's own naming: YYYYqN

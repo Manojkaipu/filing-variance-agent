@@ -88,6 +88,37 @@ def test_sector_benchmark_only_includes_the_configured_sic_code(spark):
     assert row["gross_margin_pct_median"] == pytest.approx(0.50)
     assert row["gross_margin_pct_p25"] == pytest.approx(0.40)
     assert row["gross_margin_pct_p75"] == pytest.approx(0.60)
+    assert row["sic_code"] == "3674"
+
+
+def test_revenue_floor_excludes_small_filers_and_is_recorded(spark):
+    # Without a floor, a handful of micro-cap filers drag the median far from
+    # anything a large-cap can be compared against. Measured on real SIC 3674
+    # data, the 2024Q4 operating-margin median was 0.1% across all filers and
+    # 21.7% across those above $500M.
+    schema = (
+        "cik string, sic string, calendar_year int, calendar_quarter int, revenue double, "
+        "gross_margin_pct double, operating_margin_pct double, rd_intensity_pct double, net_margin_pct double"
+    )
+    cq = spark.createDataFrame(
+        [
+            ("BIG1", "3674", 2024, 4, 5.0e9, 0.50, 0.30, 0.15, 0.25),
+            ("BIG2", "3674", 2024, 4, 2.0e9, 0.45, 0.20, 0.15, 0.16),
+            ("BIG3", "3674", 2024, 4, 1.0e9, 0.40, 0.10, 0.15, 0.08),
+            ("TINY", "3674", 2024, 4, 1.0e6, -0.20, -1.79, 0.90, -2.00),
+        ],
+        schema,
+    )
+    # One micro-cap is enough to pull the median off the large-cap cohort.
+    unfiltered = build_sector_benchmark(cq, "3674").collect()[0]
+    assert unfiltered["filer_count"] == 4
+    assert unfiltered["operating_margin_pct_median"] == pytest.approx(0.10)
+
+    floored = build_sector_benchmark(cq, "3674", min_revenue=50e6).collect()[0]
+    assert floored["filer_count"] == 3
+    assert floored["operating_margin_pct_median"] == pytest.approx(0.20)
+    # The population is recorded, so a median is never read out of context.
+    assert floored["min_quarterly_revenue"] == pytest.approx(50e6)
 
 
 def test_pivot_keeps_one_row_per_company_quarter_across_a_rename(spark):

@@ -89,7 +89,7 @@ def draft_and_submit(
 def cmd_draft(args) -> None:
     from src.utils.spark_session import get_spark
 
-    spark = get_spark("commentary-draft")
+    spark = get_spark("commentary-draft", driver_memory=args.driver_memory)
     spark.sparkContext.setLogLevel("ERROR")
     try:
         draft_and_submit(
@@ -133,7 +133,8 @@ def cmd_demo(args) -> None:
     spark = get_spark("filing-variance-demo")
     spark.sparkContext.setLogLevel("ERROR")
     try:
-        run_pipeline(spark, data_dir, sic_code="3674")
+        # No revenue floor: the five demo filers are all of comparable size.
+        run_pipeline(spark, data_dir, sic_code="3674", min_revenue=0)
         draft_and_submit(
             spark,
             ticker="DEMO",
@@ -158,8 +159,14 @@ def _load_case(spark, *, ticker: str, period: str, data_dir: Path, with_peers: b
     peers = {t: c for t, c in universe.items() if t != ticker} if with_peers else {}
     try:
         sheet = build_fact_sheet(
-            spark, ticker, universe[ticker], period, peers=peers, sector_sic_code=sic,
-            data_dir=data_dir, company_name=names.get(ticker),
+            spark,
+            ticker,
+            universe[ticker],
+            period,
+            peers=peers,
+            sector_sic_code=sic,
+            data_dir=data_dir,
+            company_name=names.get(ticker),
         )
     except LookupError as e:
         print(f"  skipping {ticker} {period}: {e}")
@@ -209,7 +216,10 @@ def cmd_eval(args) -> None:
                 raise SystemExit("No usable company-quarters; run the pipeline first.")
 
             drafter = get_drafter(args.offline, args.model or DEFAULT_MODEL)
-            print(f"Drafting {len(cases)} company-quarters with {'template' if args.offline else args.model or DEFAULT_MODEL}...")
+            print(
+                f"Drafting {len(cases)} company-quarters with "
+                f"{'template' if args.offline else args.model or DEFAULT_MODEL}..."
+            )
             result = run_drafter_eval(drafter, cases)
             print(format_drafter_report(result))
 
@@ -300,6 +310,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--request", help="analyst instructions, e.g. 'focus on margin compression'")
     p.add_argument("--model", help="Claude model ID (default: claude-opus-5-5)")
     p.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
+    p.add_argument("--driver-memory", help="e.g. 4g — raise it for the full-filer tables")
     p.set_defaults(func=cmd_draft)
 
     p = sub.add_parser("eval", help="measure the verifier's recall, or a drafter's pass rate")
@@ -323,14 +334,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("id", type=int)
     p.set_defaults(func=cmd_show)
 
-    p = sub.add_parser("approve")
+    p = sub.add_parser("approve", help="approve a draft for use, recording who signed off")
     p.add_argument("id", type=int)
     p.add_argument("--reviewer", required=True)
     p.add_argument("--note")
     p.add_argument("--override", action="store_true", help="approve a draft that failed verification (needs --note)")
     p.set_defaults(func=cmd_approve)
 
-    p = sub.add_parser("reject")
+    p = sub.add_parser("reject", help="reject a draft, recording why")
     p.add_argument("id", type=int)
     p.add_argument("--reviewer", required=True)
     p.add_argument("--note", required=True)

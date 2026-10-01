@@ -22,6 +22,7 @@ from src.pipeline.gold import (
     build_company_quarter_table_from_panel,
     build_sector_benchmark,
     export_for_tableau,
+    load_sector_min_revenue,
     load_sector_sic_code,
     write_gold,
 )
@@ -30,7 +31,9 @@ from src.pipeline.silver import build_facts, build_silver_panel_from_facts, writ
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def run_pipeline(spark, data_dir: Path, sic_code: str | None = None, tableau: bool = True) -> dict:
+def run_pipeline(
+    spark, data_dir: Path, sic_code: str | None = None, tableau: bool = True, min_revenue: float = 0.0
+) -> dict:
     raw, bronze, silver, gold = (data_dir / d for d in ("raw", "bronze", "silver", "gold"))
     started = time.perf_counter()
 
@@ -47,7 +50,7 @@ def run_pipeline(spark, data_dir: Path, sic_code: str | None = None, tableau: bo
     stage("gold")
     panel = spark.read.parquet(str(silver / "facts_panel"))
     cq = build_company_quarter_table_from_panel(panel)
-    write_gold(cq, build_sector_benchmark(cq, sic_code), gold_dir=gold)
+    write_gold(cq, build_sector_benchmark(cq, sic_code, min_revenue), gold_dir=gold)
 
     stage("anomaly")
     cq = spark.read.parquet(str(gold / "company_quarter"))
@@ -84,7 +87,13 @@ def main() -> None:
         driver_memory=args.driver_memory,
     )
     try:
-        run_pipeline(spark, args.data_dir.resolve(), sic_code=load_sector_sic_code(), tableau=not args.no_tableau)
+        run_pipeline(
+            spark,
+            args.data_dir.resolve(),
+            sic_code=load_sector_sic_code(),
+            tableau=not args.no_tableau,
+            min_revenue=load_sector_min_revenue(),
+        )
     finally:
         spark.stop()
 

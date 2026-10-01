@@ -47,6 +47,11 @@ def load_sector_sic_code() -> str:
         return str(yaml.safe_load(f)["sector_sic_code"])
 
 
+def load_sector_min_revenue() -> float:
+    with open(PROJECT_ROOT / "config" / "companies.yaml") as f:
+        return float(yaml.safe_load(f).get("sector_min_quarterly_revenue") or 0.0)
+
+
 def pivot_company_quarter(panel: DataFrame) -> DataFrame:
     """One row per (cik, calendar quarter). Name and SIC come from the
     company's most recent filing, so a mid-history rename doesn't split one
@@ -108,11 +113,20 @@ def build_company_quarter_table(spark: SparkSession) -> DataFrame:
     return build_company_quarter_table_from_panel(_read_silver(spark))
 
 
-def build_sector_benchmark(cq: DataFrame, sic_code: str | None) -> DataFrame:
+def build_sector_benchmark(cq: DataFrame, sic_code: str | None, min_revenue: float = 0.0) -> DataFrame:
     """25th/50th/75th percentile of each ratio per calendar quarter, across
-    every filer with the given SIC code (pass None to benchmark everything
-    in `cq`). Only filers that reported revenue that quarter count."""
-    sector = cq.filter(F.col("revenue").isNotNull() & (F.col("revenue") > 0))
+    filers with the given SIC code (pass None to benchmark everything in
+    `cq`). Only filers that reported revenue that quarter count.
+
+    `min_revenue` is a floor on quarterly revenue, and it matters more than
+    it looks. SIC 3674 holds about 80 reporting filers, most of them tiny:
+    in 2024Q4 the unweighted median operating margin across all of them was
+    0.1%, because the tail includes companies like Wolfspeed at -179%. The
+    same median across filers above $500M was 21.7%. Without a floor,
+    "above the sector median" is true of a struggling large-cap and tells
+    the reader nothing. The threshold is recorded on every row so a reader
+    can see which population a median describes."""
+    sector = cq.filter(F.col("revenue").isNotNull() & (F.col("revenue") > F.lit(max(min_revenue, 0.0))))
     if sic_code is not None:
         sector = sector.filter(F.col("sic") == sic_code)
 
@@ -124,7 +138,12 @@ def build_sector_benchmark(cq: DataFrame, sic_code: str | None) -> DataFrame:
             F.percentile_approx(c, 0.75).alias(f"{c}_p75"),
         ]
     agg_exprs.append(F.countDistinct("cik").alias("filer_count"))
-    return sector.groupBy("calendar_year", "calendar_quarter").agg(*agg_exprs)
+    return (
+        sector.groupBy("calendar_year", "calendar_quarter")
+        .agg(*agg_exprs)
+        .withColumn("min_quarterly_revenue", F.lit(float(min_revenue)))
+        .withColumn("sic_code", F.lit(sic_code))
+    )
 
 
 def write_gold(cq: DataFrame, benchmark: DataFrame, fmt: str = "parquet", gold_dir: Path | None = None) -> None:

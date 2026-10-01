@@ -318,6 +318,10 @@ def assemble_fact_sheet(
     # 4. Sector benchmark (medians and quartiles, focal period only).
     if benchmark_row:
         n = benchmark_row.get("filer_count")
+        floor = benchmark_row.get("min_quarterly_revenue") or 0
+        population = f"SIC {sector_sic_code}, {n} filers" if sector_sic_code else f"{n} filers"
+        if floor:
+            population += f" with quarterly revenue above {format_value(float(floor), USD)}"
         for ratio_metric, label, _ in RATIOS:
             for stat, stat_label in (("median", "median"), ("p25", "25th percentile"), ("p75", "75th percentile")):
                 v = benchmark_row.get(f"{ratio_metric}_{stat}")
@@ -333,7 +337,7 @@ def assemble_fact_sheet(
                         period=period,
                         value=float(v),
                         unit=RATIO,
-                        note=f"SIC {sector_sic_code}, {n} filers" if sector_sic_code else f"{n} filers",
+                        note=population,
                     )
                 )
 
