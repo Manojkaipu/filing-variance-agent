@@ -81,9 +81,13 @@ input fact IDs.
 - For every sentence, list in `fact_ids` each fact whose value (or whose \
 difference or percent change with another cited fact) appears in that \
 sentence. A sentence without numbers may cite nothing.
-- Write amounts in dollars with a scale word, rounded correctly: \
-"$12.83 billion", "$845 million". Write ratios and percent changes as \
-percentages with one decimal ("41.2%"). Write margin moves in basis points \
+- Write amounts in dollars with a scale word: "$12.83 billion", \
+"$845 million". Write ratios and percent changes as percentages with one \
+decimal ("41.2%"). Round once, directly from the fact sheet value, and \
+round half away from zero: a fact of 0.146474 is "14.6%", never "14.7%" \
+from rounding twice. An automated check compares every figure you write \
+against the cited value at the precision you wrote it, so a figure that is \
+correct to fewer decimals is safer than one rounded twice. Write margin moves in basis points \
 ("up 170 basis points") or percentage points ("1.7 percentage points"). \
 Express direction with words (up/down, rose/fell), not minus signs.
 - Do not write any other numerals. Spell out counts ("three of the nine \

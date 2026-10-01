@@ -113,6 +113,10 @@ PERCENT_RE = re.compile(r"(-|−)?" + _NUM + r"\s?(%|percent\b)", re.I)
 PERIOD_RE = re.compile(
     r"\b(?:FY\s?)?\d{4}\s?Q[1-4]\b|\bQ[1-4](?:\s?(?:FY)?\s?\d{2,4})?\b|\b(?:19|20)\d{2}\b|\b10-[KQ](?:/A)?\b", re.I
 )
+# Ordinals name a position, not a quantity: "the 25th percentile" is a label
+# for a value that is itself cited and checked. "3 straight quarters" has no
+# ordinal suffix and stays flagged.
+ORDINAL_RE = re.compile(r"\b\d+(?:st|nd|rd|th)\b", re.I)
 BARE_NUMBER_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 UP_WORDS = re.compile(
@@ -180,7 +184,7 @@ def extract_quantities(text: str, exempt: tuple[str, ...] = ()) -> tuple[list[Qu
     # Longest first, so "3M Company" is removed before a bare "3M".
     for phrase in sorted((p for p in exempt if p and any(ch.isdigit() for ch in p)), key=len, reverse=True):
         remainder = re.sub(re.escape(phrase), " ", remainder, flags=re.I)
-    remainder = PERIOD_RE.sub(" ", remainder)
+    remainder = ORDINAL_RE.sub(" ", PERIOD_RE.sub(" ", remainder))
     strays = BARE_NUMBER_RE.findall(remainder)
     return quantities, strays
 

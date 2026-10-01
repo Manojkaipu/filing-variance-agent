@@ -54,6 +54,16 @@ def test_digits_in_a_company_name_are_not_treated_as_figures():
     assert extract_quantities("3M Company reported a lower margin.")[1] == ["3"]
 
 
+def test_ordinals_naming_a_percentile_are_not_figures():
+    # Claude wrote "above the 25th percentile of 35.6%" on the first real run;
+    # the 25 names which percentile, and the 35.6% is the checked value.
+    quantities, strays = extract_quantities("Margin sat above the 25th percentile of 35.6%.")
+    assert strays == []
+    assert [q.kind for q in quantities] == ["percent"]
+    # A bare count still has to be spelled out.
+    assert extract_quantities("Revenue grew for 3 straight quarters.")[1] == ["3"]
+
+
 def test_years_quarters_and_form_names_are_not_numbers():
     quantities, strays = extract_quantities("In 2024Q4 (Q4 2024, fiscal 2025), per the 10-K and 10-Q/A filings.")
     assert quantities == [] and strays == []
