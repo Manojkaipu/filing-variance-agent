@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from datetime import date, timedelta
 from typing import Protocol
@@ -503,18 +504,36 @@ def verify(draft: Draft, sheet: FactSheet, ledger: SourceLedger | None) -> Verif
     return report
 
 
-def spark_ledger(spark, sheet: FactSheet, bronze_dir) -> InMemoryLedger:
+def cited_accessions(sheets: FactSheet | Iterable[FactSheet]) -> list[str]:
+    """Every accession number the given fact sheet(s) cite as a source."""
+    if isinstance(sheets, FactSheet):
+        sheets = [sheets]
+    return sorted(
+        {a for sheet in sheets for f in sheet.facts.values() if f.source for a in f.source.adsh.split("|") if a}
+    )
+
+
+def spark_ledger(spark, sheets: FactSheet | Iterable[FactSheet], bronze_dir) -> InMemoryLedger:
     """Loads, from bronze `num` (the SEC's rows exactly as published), every
-    fact in the accession numbers the fact sheet cites."""
+    fact in the accession numbers the given sheet(s) cite.
+
+    Takes several sheets at once on purpose. Bronze holds every filer's facts
+    — 48M rows over 1.46 GB of Parquet on the 14-quarter run — and the filter
+    is on `adsh`, which the table is not partitioned by, so each call costs a
+    full scan. Building one shared ledger for a 20-case eval turns 20 scans
+    into 1; the ledger is keyed by (adsh, tag, qtrs), so one instance serves
+    every sheet without collisions."""
     from pyspark.sql import functions as F
 
-    accessions = sorted({a for f in sheet.facts.values() if f.source for a in f.source.adsh.split("|") if a})
+    accessions = cited_accessions(sheets)
+    if not accessions:
+        return InMemoryLedger([])
     num = spark.read.parquet(str(bronze_dir / "num")).filter(
         F.col("adsh").isin(accessions) & F.col("segments").isNull() & F.col("coreg").isNull() & (F.col("uom") == "USD")
     )
     rows = []
     for r in num.select("adsh", "tag", "ddate", "qtrs", "value").collect():
-        if r["value"] is None:
+        if r["value"] is None or r["ddate"] is None:
             continue
         d = r["ddate"]
         rows.append((r["adsh"], r["tag"], f"{d[:4]}-{d[4:6]}-{d[6:8]}", int(r["qtrs"]), float(r["value"])))

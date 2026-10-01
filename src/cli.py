@@ -149,16 +149,15 @@ def cmd_demo(args) -> None:
         spark.stop()
 
 
-def _load_case(spark, *, ticker: str, period: str, data_dir: Path, with_peers: bool = True):
-    """(fact sheet, ledger) for one company-quarter, or None if the pipeline
-    has no data for it."""
+def _load_sheet(spark, *, ticker: str, period: str, data_dir: Path, with_peers: bool = True):
+    """The fact sheet for one company-quarter, or None if the pipeline has no
+    data for it."""
     from src.agent.facts import build_fact_sheet
-    from src.agent.verifier import spark_ledger
 
     universe, names, sic = resolve_universe(data_dir)
     peers = {t: c for t, c in universe.items() if t != ticker} if with_peers else {}
     try:
-        sheet = build_fact_sheet(
+        return build_fact_sheet(
             spark,
             ticker,
             universe[ticker],
@@ -169,7 +168,18 @@ def _load_case(spark, *, ticker: str, period: str, data_dir: Path, with_peers: b
             company_name=names.get(ticker),
         )
     except LookupError as e:
-        print(f"  skipping {ticker} {period}: {e}")
+        print(f"  skipping {ticker} {period}: {e}", flush=True)
+        return None
+
+
+def _load_case(spark, *, ticker: str, period: str, data_dir: Path, with_peers: bool = True):
+    """(fact sheet, ledger) for one company-quarter. For more than one case,
+    use _load_sheet and build a single shared ledger instead — see
+    src/agent/verifier.py::spark_ledger."""
+    from src.agent.verifier import spark_ledger
+
+    sheet = _load_sheet(spark, ticker=ticker, period=period, data_dir=data_dir, with_peers=with_peers)
+    if sheet is None:
         return None
     return sheet, spark_ledger(spark, sheet, data_dir / "bronze")
 
@@ -203,22 +213,32 @@ def cmd_eval(args) -> None:
             print(format_verifier_report(result))
         else:
             from src.agent.drafter import DEFAULT_MODEL, get_drafter
+            from src.agent.verifier import cited_accessions, spark_ledger
 
             tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
             quarters = [q.strip() for q in args.quarters.split(",") if q.strip()]
-            cases = []
-            for ticker in tickers:
-                for quarter in quarters:
-                    case = _load_case(spark, ticker=ticker, period=quarter, data_dir=data_dir)
-                    if case is not None:
-                        cases.append(case)
-            if not cases:
+            wanted = [(t, q) for t in tickers for q in quarters]
+
+            print(f"Building {len(wanted)} fact sheets...", flush=True)
+            sheets = []
+            for n, (ticker, quarter) in enumerate(wanted, 1):
+                sheet = _load_sheet(spark, ticker=ticker, period=quarter, data_dir=data_dir)
+                if sheet is not None:
+                    sheets.append(sheet)
+                    print(f"  [{n}/{len(wanted)}] {ticker} {quarter}: {len(sheet.facts)} facts", flush=True)
+            if not sheets:
                 raise SystemExit("No usable company-quarters; run the pipeline first.")
+
+            # One bronze scan for every sheet, not one per sheet.
+            print(f"Loading filing rows for {len(cited_accessions(sheets))} accession numbers...", flush=True)
+            ledger = spark_ledger(spark, sheets, data_dir / "bronze")
+            cases = [(sheet, ledger) for sheet in sheets]
 
             drafter = get_drafter(args.offline, args.model or DEFAULT_MODEL)
             print(
                 f"Drafting {len(cases)} company-quarters with "
-                f"{'template' if args.offline else args.model or DEFAULT_MODEL}..."
+                f"{'template' if args.offline else args.model or DEFAULT_MODEL}...",
+                flush=True,
             )
             result = run_drafter_eval(drafter, cases)
             print(format_drafter_report(result))

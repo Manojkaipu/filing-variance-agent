@@ -90,30 +90,39 @@ def run_verifier_eval(draft, sheet: FactSheet, ledger: SourceLedger | None) -> d
     }
 
 
-def run_drafter_eval(drafter: Drafter, cases: list[tuple[FactSheet, SourceLedger | None]]) -> dict:
+def run_drafter_eval(
+    drafter: Drafter, cases: list[tuple[FactSheet, SourceLedger | None]], progress: bool = True
+) -> dict:
     """One draft per case. A drafter that raises (a refusal, a truncated
-    response) is recorded as an error rather than silently dropped."""
+    response) is recorded as an error rather than silently dropped.
+
+    Each case is reported as it finishes: a 20-case run against the API
+    takes minutes, and silence is indistinguishable from a hang."""
     results, error_codes, warning_codes = [], Counter(), Counter()
-    for sheet, ledger in cases:
+    for n, (sheet, ledger) in enumerate(cases, 1):
         started = time.perf_counter()
+        label = f"{sheet.ticker} {sheet.period}"
         try:
             draft = drafter.draft(sheet)
         except Exception as e:  # refusal, truncation, transport failure
-            results.append(
-                {
-                    "case": f"{sheet.ticker} {sheet.period}",
-                    "status": "drafter_error",
-                    "detail": f"{type(e).__name__}: {e}",
-                }
-            )
+            results.append({"case": label, "status": "drafter_error", "detail": f"{type(e).__name__}: {e}"})
+            if progress:
+                print(f"  [{n}/{len(cases)}] {label}: drafter error — {type(e).__name__}", flush=True)
             continue
 
         report = verify(draft, sheet, ledger)
         error_codes.update(i.code for i in report.issues if i.level == ERROR)
         warning_codes.update(i.code for i in report.issues if i.level == WARNING)
+        if progress:
+            codes = ", ".join(_error_codes(report)) or "clean"
+            print(
+                f"  [{n}/{len(cases)}] {label}: {'passed' if report.passed else 'FAILED'}"
+                f" — {report.numbers_checked} numbers, {codes}",
+                flush=True,
+            )
         results.append(
             {
-                "case": f"{sheet.ticker} {sheet.period}",
+                "case": label,
                 "status": "passed" if report.passed else "failed",
                 "drafter": draft.drafter,
                 "sentences": len(draft.sentences),
