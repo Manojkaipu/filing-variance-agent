@@ -128,9 +128,15 @@ def _half_unit(number_text: str) -> float:
     return 0.5 * 10 ** (-decimals)
 
 
-def extract_quantities(text: str) -> tuple[list[Quantity], list[str]]:
+def extract_quantities(text: str, exempt: tuple[str, ...] = ()) -> tuple[list[Quantity], list[str]]:
     """Returns (quantities, stray_numerals). Stray numerals are digits that
-    aren't a recognizable financial quantity, year, or quarter label."""
+    aren't a recognizable financial quantity, year, or quarter label.
+
+    `exempt` holds literal phrases whose digits are names, not quantities —
+    the company's own name above all. Plenty of filers have a digit in the
+    name (3M, 7-Eleven, 1-800-Flowers), and flagging the subject of the
+    sentence as an unverifiable figure would be a false positive on every
+    sentence that names it."""
     quantities: list[Quantity] = []
     spans: list[tuple[int, int]] = []
 
@@ -170,7 +176,11 @@ def extract_quantities(text: str) -> tuple[list[Quantity], list[str]]:
     masked = list(text)
     for s, e in spans:
         masked[s:e] = " " * (e - s)
-    remainder = PERIOD_RE.sub(" ", "".join(masked))
+    remainder = "".join(masked)
+    # Longest first, so "3M Company" is removed before a bare "3M".
+    for phrase in sorted((p for p in exempt if p and any(ch.isdigit() for ch in p)), key=len, reverse=True):
+        remainder = re.sub(re.escape(phrase), " ", remainder, flags=re.I)
+    remainder = PERIOD_RE.sub(" ", remainder)
     strays = BARE_NUMBER_RE.findall(remainder)
     return quantities, strays
 
@@ -220,7 +230,21 @@ def _matches(q: Quantity, c: Candidate) -> bool:
     return q.kind == c.kind and abs(abs(c.value) - q.value) <= q.tolerance * (1 + 1e-9) + 1e-12
 
 
-def check_sentence(idx: int, text: str, fact_ids: list[str], sheet: FactSheet, report: VerificationReport) -> None:
+def _exempt_phrases(sheet: FactSheet) -> tuple[str, ...]:
+    """Names that may legitimately contain digits: the company's own name and
+    every entity on the fact sheet (peers are named in the prose too)."""
+    names = {sheet.company_name, sheet.ticker} | {f.entity for f in sheet.facts.values()}
+    return tuple(n for n in names if n)
+
+
+def check_sentence(
+    idx: int,
+    text: str,
+    fact_ids: list[str],
+    sheet: FactSheet,
+    report: VerificationReport,
+    exempt: tuple[str, ...] = (),
+) -> None:
     cited = []
     for fid in fact_ids:
         fact = sheet.get(fid)
@@ -229,7 +253,7 @@ def check_sentence(idx: int, text: str, fact_ids: list[str], sheet: FactSheet, r
         else:
             cited.append(fact)
 
-    quantities, strays = extract_quantities(text)
+    quantities, strays = extract_quantities(text, exempt)
     for s in strays:
         report.add(
             ERROR,
@@ -461,13 +485,14 @@ def verify(draft: Draft, sheet: FactSheet, ledger: SourceLedger | None) -> Verif
     report = VerificationReport()
     if not draft.sentences:
         report.add(ERROR, "empty_draft", "Draft contains no sentences.")
+    exempt = _exempt_phrases(sheet)
     cited: set[str] = set()
     for idx, s in enumerate(draft.sentences):
-        check_sentence(idx, s.text, s.fact_ids, sheet, report)
+        check_sentence(idx, s.text, s.fact_ids, sheet, report, exempt)
         check_policy(idx, s.text, report)
         cited.update(fid for fid in s.fact_ids if sheet.get(fid))
     for q in draft.open_questions:
-        quantities, strays = extract_quantities(q)
+        quantities, strays = extract_quantities(q, exempt)
         if quantities or strays:
             report.add(ERROR, "number_in_open_question", f"Open questions must not contain numbers: '{q}'")
     check_sources(cited, sheet, ledger, report)

@@ -45,6 +45,15 @@ def test_extracts_financial_quantities(text, kind, value):
     assert [(q.kind, pytest.approx(q.value)) for q in quantities] == [(kind, pytest.approx(value))]
 
 
+def test_digits_in_a_company_name_are_not_treated_as_figures():
+    # 3M and 7-Eleven are real filers; the subject of the sentence must not
+    # be flagged as an unverifiable figure.
+    quantities, strays = extract_quantities("3M Company reported a lower margin.", exempt=("3M Company",))
+    assert quantities == [] and strays == []
+    # Without the exemption the same digits are correctly suspicious.
+    assert extract_quantities("3M Company reported a lower margin.")[1] == ["3"]
+
+
 def test_years_quarters_and_form_names_are_not_numbers():
     quantities, strays = extract_quantities("In 2024Q4 (Q4 2024, fiscal 2025), per the 10-K and 10-Q/A filings.")
     assert quantities == [] and strays == []
