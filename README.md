@@ -46,7 +46,8 @@ SEC EDGAR Financial Statement Data Sets (every XBRL fact, every filer)
       │                    · lineage on every row: accession number(s), XBRL tag(s), derivation
       ▼
  [gold]     company_quarter: margins, gap-safe QoQ/YoY · sector_benchmark: SIC 3674 quartiles
-      │     anomaly_log: identities, YTD consistency, scale errors, sign anomalies, restatements
+      │     anomaly_log: identities, YTD consistency, scale errors, sign anomalies,
+      │                  restatements, concept changes
       │     tableau_export/*.csv
       ▼
  [agent]    fact sheet (≈70 cited facts) → drafter (Claude, or offline template) → Draft
@@ -58,8 +59,63 @@ SEC EDGAR Financial Statement Data Sets (every XBRL fact, every filer)
       │     policy:  non-GAAP and forward-looking language fail; causal claims are warnings
       ▼
  [review]   SQLite queue: pending_review / blocked → approve · reject → markdown with
-            footnotes linking each figure to its EDGAR filing
+      │     footnotes linking each figure to its EDGAR filing
+      ▼
+ [eval]     inject one defect at a time → recall · meaning-preserving rewrites → specificity
 ```
+
+## Measured results
+
+Run on 14 quarters of real SEC filings (2022q1–2025q2, 8 GB of
+Financial Statement Data Sets):
+
+| | |
+|---|---|
+| XBRL facts ingested | **48,328,852** |
+| Facts mapped to tracked metrics | 789,816 |
+| Company-quarters produced | 127,050 across **7,727 filers** |
+| Anomalies flagged | 88,429 |
+| Pipeline wall-clock | ~10 min, 8-core laptop, 5 GB Spark driver |
+
+**Does the verifier actually catch wrong numbers?** The eval injects one
+specific defect at a time into a draft that already passes, and requires the
+error code that defect should trigger — then applies meaning-preserving
+rewrites and requires silence. On real Intel 2024Q4 data
+([full report](docs/eval_verifier.json)):
+
+```
+recall:      15/15 injected defects caught
+specificity:   5/5 valid rewrites passed untouched
+```
+
+The defect classes are a figure off by 2%, by 1000×, and in its last written
+digit; a percentage and a basis-point move overstated; a direction word
+flipped; citations dropped, invented, and repointed at a real-but-different
+fact; a tampered filing row; a ratio that no longer equals its own inputs;
+non-GAAP and forward-looking language; a bare numeral; and a number smuggled
+into an open question. `python -m src.cli eval verifier` reproduces it.
+
+**What real data changed about the code.** Two rules were wrong in ways only
+real filings exposed:
+
+- The restatement rule over-fired on **28% of its flags** (12,586 of 44,404).
+  They were companies switching XBRL concept — `StockholdersEquity` →
+  `StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest`
+  (8,972 cases), `NetIncomeLoss` → `ProfitLoss` (2,036) — not restating a
+  value. Those are now a separate `concept_change` finding, and the surviving
+  restatements are real: an operating income that flipped sign between
+  filings, and one restated from `983` to `983,000`, a filer fixing its own
+  thousands-vs-dollars error.
+- The sector median was computed across every SIC 3674 filer, so Intel's
+  2.9% operating margin came out *above* the "sector median" of 0.1% — true
+  only because the tail includes micro-caps like Wolfspeed at −179%. With a
+  configurable revenue floor (default $50M/quarter, ~50 filers), the median
+  is 6.0% and Intel sits below it. The floor and filer count are written onto
+  every benchmark row so a median always carries its population.
+
+[docs/sample_commentary_intc.md](docs/sample_commentary_intc.md) is generated
+end to end from Intel's real filings, every figure footnoted to its EDGAR
+filing index.
 
 ## Quickstart
 
@@ -88,11 +144,26 @@ companies are built to hit the hard cases:
 
 ```bash
 export EDGAR_CONTACT_EMAIL="you@example.com"   # the SEC requires a contact email in the User-Agent
-./scripts/run_pipeline.sh                      # download 2018q1–2025q4, then run the pipeline
+python -m src.download.edgar_downloader --start-quarter 2022q1 --end-quarter 2025q2
+python -m src.pipeline.run --driver-memory 5g --shuffle-partitions 32
+
 export ANTHROPIC_API_KEY=...                   # or an `ant auth login` profile
-python -m src.cli draft --ticker INTC --quarter 2024Q2
-python -m src.cli draft --ticker INTC --quarter 2024Q2 --request "Focus on gross margin"
-python -m src.cli draft --ticker INTC --quarter 2024Q2 --offline   # template drafter
+python -m src.cli draft --ticker INTC --quarter 2024Q4 --driver-memory 4g
+python -m src.cli draft --ticker INTC --quarter 2024Q4 --request "Focus on gross margin"
+python -m src.cli draft --ticker INTC --quarter 2024Q4 --offline   # no API key needed
+```
+
+`./scripts/run_pipeline.sh` does the download and pipeline in one step using
+the full range in `config/companies.yaml`. Each quarter is roughly 80–130 MB
+zipped; 14 quarters extract to about 8 GB. Spark's default 1 GB driver heap
+is not enough for a full-filer run — pass `--driver-memory`.
+
+### Measuring it yourself
+
+```bash
+python -m src.cli eval verifier --ticker INTC --quarter 2024Q4   # free, no API calls
+python -m src.cli eval drafter --tickers INTC,AMD,NVDA --quarters 2024Q3,2024Q4
+python -m src.cli eval drafter --offline --quarters 2024Q4       # template baseline, free
 ```
 
 The company universe (Intel plus nine peers) and the sector SIC code are set
@@ -151,7 +222,7 @@ raises an error and is never parsed as a draft.
 ## Testing
 
 ```bash
-pytest            # 76 tests: unit, Spark, and an end-to-end run on synthetic filings
+pytest            # 114 tests: unit, Spark, and an end-to-end run on synthetic filings
 ruff check src tests
 ```
 
@@ -160,9 +231,14 @@ Tests use synthetic data with answers worked out by hand. For example,
 "citing a +10.0% change in a sentence that says 'fell' must fail". There are
 also regression tests for each correctness bug fixed in the pipeline:
 quarters overwriting each other in bronze, Q4 matched across the wrong year,
-restatement history lost to early de-duplication, and QoQ computed across a
-missing quarter. The Claude drafter is tested with a stubbed client: request
-shape, refusal handling, and a hallucinated number caught downstream. CI
+restatement history lost to early de-duplication, QoQ computed across a
+missing quarter, a concept change misread as a restatement, a revenue floor
+that changes which median you get, and the YAML coercion that turned ON
+Semiconductor's ticker into the boolean `true`. The Claude drafter is tested
+with a stubbed client: request shape, refusal handling, and a hallucinated
+number caught downstream. The eval harness is tested too — a mutation that
+silently stopped applying would push recall toward 100% for the wrong
+reason, so "every mutation still applies" is its own assertion. CI
 ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs lint, tests and
 the demo on Ubuntu.
 
@@ -181,8 +257,10 @@ src/agent/facts.py                 FactSheet: cited facts with lineage and formu
 src/agent/drafter.py               ClaudeDrafter (structured output) and TemplateDrafter
 src/agent/verifier.py              number extraction, both checks, policy rules
 src/review/queue.py                SQLite review queue, approval rules, markdown export
+src/eval/mutations.py              injected defects + meaning-preserving rewrites
+src/eval/harness.py                recall/specificity and drafter pass-rate measurement
 src/demo/synthetic_filings.py      fictional SEC-format filings for the demo and e2e tests
-src/cli.py                         demo / draft / queue / show / approve / reject / export
+src/cli.py                         demo / draft / eval / queue / show / approve / reject / export
 ```
 
 ## Known limitations
@@ -190,16 +268,30 @@ src/cli.py                         demo / draft / queue / show / approve / rejec
 - **Consolidated GAAP facts only.** Segment breakdowns (the `segments` field)
   and non-GAAP measures are out of scope, so the commentary can explain
   dollar moves but not segment mix or price/volume effects.
-- **The metric dictionary's tags still need checking against real filings.**
-  See [config/metric_dictionary.yaml](config/metric_dictionary.yaml). The
-  sector benchmark is only as complete as that tag coverage.
+- **Tag coverage is good but not complete.** Across SIC 3674 filer-quarters
+  that reported revenue, coverage is 100% revenue, 97% gross profit, 99%
+  operating income, 98% net income, 88% R&D — but only 73% total liabilities,
+  because many filers tag only "liabilities and equity". Every number the
+  agent cites is traced to a filing, so a gap shows up as a missing fact
+  rather than a wrong one.
 - **Peer and sector values aren't traced to individual filings.** They are
-  aggregates from the gold layer; the verifier marks them as such rather than
-  claiming filing-level verification.
-- **The LLM path hasn't been evaluated at scale.** The verifier is the safety
-  net, but how often Claude's drafts pass verification without edits on real
-  filings hasn't been measured yet. That's the natural next step: an eval set
-  of company-quarters, scored by pass rate and reviewer edits.
+  aggregates from the gold layer; the verifier marks them
+  `aggregate_not_traced` rather than claiming filing-level verification.
+- **The sector median is a judgment call, not a fact.** It depends on the
+  revenue floor, as the numbers above show. The floor is explicit and
+  recorded, but "the sector" is still a choice the reader should see.
+- **Early quarters are thin.** The quarterly datasets carry comparative
+  columns, so periods before the downloaded range exist but with few filers
+  (3 filers in 2020Q3 vs ~50 from 2021Q1). `filer_count` makes this visible;
+  don't read a median built from three companies.
+- **Verifier recall is measured against the defect classes I thought of.**
+  15/15 is a statement about those 15 classes on this data, not a guarantee.
+  A defect nobody modelled — a plausible-but-wrong causal claim that reads as
+  hedged, say — would pass check 1 and check 2 and land on the reviewer.
+- **The Claude drafter's pass rate on real filings is not yet measured.** The
+  deterministic drafter passes by construction, and the LLM path is tested
+  against a stubbed client, but `eval drafter` has not been run against the
+  API at scale. That is the one number still missing.
 
 ## Disclaimer
 

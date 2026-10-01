@@ -1,10 +1,11 @@
 > **Sample output from `python -m src.cli demo`.** Demo Silicon Corp, its peers, and every figure
 > below are fictional (see `src/demo/synthetic_filings.py`). The EDGAR links show the citation
-> format; they use made-up accession numbers and do not resolve.
+> format; they use made-up accession numbers and do not resolve. For the same pipeline on real
+> filings, see [sample_commentary_intc.md](sample_commentary_intc.md).
 
 # Demo Silicon Corp (DEMO) — 2024Q4 variance commentary
 
-*Approved by Demo Reviewer on 2026-10-01T01:40:06+00:00. Drafted by `template-v1`; GAAP figures from SEC XBRL filings.*
+*Approved by Demo Reviewer on 2026-10-01T02:39:06+00:00. Drafted by `template-v1`; GAAP figures from SEC XBRL filings.*
 
 ## Headline
 
